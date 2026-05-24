@@ -1,0 +1,90 @@
+
+# py -m streamlit run C:\Users\batu\Desktop\kodlar\deneme.py 
+import streamlit as st
+import pandas as pd 
+import plotly.express as px
+import websocket 
+import json
+import threading
+import time
+from google import genai 
+from collections import deque
+from  streamlit_autorefresh import st_autorefresh 
+
+api_key = "**********"
+symbols = ["BINANCE:BTCUSDT", "BINANCE:ETHUSDT", "BINANCE:SOLUSDT"]
+
+my_select=st.selectbox("kripto seçiniz",symbols)
+clen_symbols =my_select.split(":")[1]
+@st.cache_resource
+def get_prices():
+    return deque(maxlen=300)
+
+prices=get_prices()
+
+
+if "active_symbol" not in st.session_state:
+    st.session_state.active_symbol = my_select
+    
+if st.session_state.active_symbol !=my_select:
+    prices.clear()
+    st.session_state.active_symbol = my_select
+    st.session_state.started=False
+
+def on_message(ws, message):
+    
+    data=json.loads(message)
+
+    if data.get("type") == "trade":
+        for trade in data["data"]:
+            prices.append({
+                "symbol": trade["s"],
+                "price": trade["p"],
+                "timestamp": pd.to_datetime(trade["t"], unit="ms"),
+                "volume": trade["v"]
+            })
+
+def on_open(ws):
+    print("WebSocket açıldı")
+    
+    ws.send(json.dumps({
+        "type": "subscribe",
+        "symbol": my_select
+    }))
+
+def start_websocket():
+   
+    ws = websocket.WebSocketApp(
+        f"wss://ws.finnhub.io?token={api_key}",
+        on_message=on_message,
+        on_open=on_open
+    )
+    ws.run_forever()
+
+st.title("Canlı Kripto Fiyat Grafiği")
+
+
+if "started" not in st.session_state or st.session_state.started ==False: 
+    thread = threading.Thread(target=start_websocket, daemon=True)
+    thread.daemon = True
+    thread.start()
+    st.session_state.started = True
+
+
+
+if len(prices) > 0:
+    df = pd.DataFrame(list(prices))
+
+    fig = px.line(
+        df,
+        x="timestamp",
+        y="price",
+        color="symbol",
+        title=f"{clen_symbols} fiyat grafiği"
+    )
+    st.plotly_chart(fig , use_container_width=True, key=f"{len(prices)}")
+    st.dataframe(df.tail(10), use_container_width=True)
+else:
+    st.info("bekleyiniz...") 
+st_autorefresh(interval=1000, key="refresh")
+
