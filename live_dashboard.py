@@ -1,17 +1,18 @@
 
 # py -m streamlit run C:\Users\batu\Desktop\kodlar\deneme.py 
-import streamlit as st
-import pandas as pd 
-import plotly.express as px
-import websocket 
+import streamlit as st # type: ignore
+import pandas as pd # type: ignore
+import plotly.express as px # type: ignore
+import websocket # type: ignore
+import plotly.graph_objects as go  # type: ignore
 import json
 import threading
 import time
 from google import genai 
 from collections import deque
-from  streamlit_autorefresh import st_autorefresh 
+from  streamlit_autorefresh import st_autorefresh # type: ignore
 
-api_key = "**********"
+api_key = "*********"
 symbols = ["BINANCE:BTCUSDT", "BINANCE:ETHUSDT", "BINANCE:SOLUSDT"]
 
 my_select=st.selectbox("kripto seçiniz",symbols)
@@ -74,15 +75,25 @@ if "started" not in st.session_state or st.session_state.started ==False:
 
 if len(prices) > 0:
     df = pd.DataFrame(list(prices))
+    
+    df=df.set_index("timestamp")
+    ahlc=df["price"].resample("1min").ohlc()
 
-    fig = px.line(
-        df,
-        x="timestamp",
-        y="price",
-        color="symbol",
-        title=f"{clen_symbols} fiyat grafiği"
+    fig = go.Figure(
+        data=[
+            go.Candlestick(
+            x=ahlc.index,
+            open=ahlc["open"],
+            high=ahlc["high"],
+            low=ahlc["low"],
+            close=ahlc["close"],
+            name="Fiyat"
+            
+           )
+        ]
     )
-    st.plotly_chart(fig , use_container_width=True, key=f"{len(prices)}")
+    fig.update_layout(title=f"{clen_symbols} Canlı Fiyat Grafiği", xaxis_title="Zaman", yaxis_title="Fiyat (USD)", xaxis_rangeslider_visible=False)
+    st.plotly_chart(fig , use_container_width=True, key=f"candlestick_{len(prices)}")
     st.dataframe(df.tail(10), use_container_width=True)
 else:
     st.info("bekleyiniz...") 
