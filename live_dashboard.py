@@ -8,11 +8,12 @@ import plotly.graph_objects as go  # type: ignore
 import json
 import threading
 import time
+import yfinance as yf # type: ignore
 from google import genai 
 from collections import deque
 from  streamlit_autorefresh import st_autorefresh # type: ignore
 
-api_key = "*********"
+api_key = "?????********"
 symbols = ["BINANCE:BTCUSDT", "BINANCE:ETHUSDT", "BINANCE:SOLUSDT"]
 
 my_select=st.selectbox("kripto seçiniz",symbols)
@@ -73,6 +74,7 @@ if "started" not in st.session_state or st.session_state.started ==False:
 
 
 
+
 if len(prices) > 0:
     df = pd.DataFrame(list(prices))
     
@@ -94,8 +96,25 @@ if len(prices) > 0:
     )
     fig.update_layout(title=f"{clen_symbols} Canlı Fiyat Grafiği", xaxis_title="Zaman", yaxis_title="Fiyat (USD)", xaxis_rangeslider_visible=False)
     st.plotly_chart(fig , use_container_width=True, key=f"candlestick_{len(prices)}")
-    st.dataframe(df.tail(10), use_container_width=True)
+    
 else:
     st.info("bekleyiniz...") 
 st_autorefresh(interval=1000, key="refresh")
+
+
+
+y_map={
+    "BINANCE:BTCUSDT": "BTC-USD",
+    "BINANCE:ETHUSDT": "ETH-USD",
+    "BINANCE:SOLUSDT": "SOL-USD "
+    }
+yıl=["1y","2y","5y","10y","max"]
+
+zaman=st.selectbox("zaman aralığı seçiniz" , yıl)
+sec=y_map[my_select]
+cek=yf.download(sec , period=zaman)
+st.line_chart(cek["Close"])
+
+
+
 
