@@ -13,8 +13,8 @@ from google import genai
 from collections import deque
 from  streamlit_autorefresh import st_autorefresh # type: ignore
 
-api_key = "?????********"
-symbols = ["BINANCE:BTCUSDT", "BINANCE:ETHUSDT", "BINANCE:SOLUSDT"]
+api_key = "****************"
+symbols = ["BINANCE:BTCUSDT", "BINANCE:ETHUSDT", "BINANCE:SOLUSDT "]
 
 my_select=st.selectbox("kripto seçiniz",symbols)
 clen_symbols =my_select.split(":")[1]
@@ -102,7 +102,7 @@ else:
 st_autorefresh(interval=1000, key="refresh")
 
 
-
+""" yfinance ile geçmiş fiyat verisi çekme ve görselleştirme"""
 y_map={
     "BINANCE:BTCUSDT": "BTC-USD",
     "BINANCE:ETHUSDT": "ETH-USD",
@@ -115,6 +115,30 @@ sec=y_map[my_select]
 cek=yf.download(sec , period=zaman)
 st.line_chart(cek["Close"])
 
+# portföy bölümü 
+st.title("portföyüm")
+portföy=[]
+if "portföy" not in st.session_state:
+    st.session_state.portföy=[]
+
+h_seç=st.multiselect("hisse seçiniz",symbols)
+
+for sec_coin in h_seç:
+
+  adet=st.number_input(f"{sec_coin} için  adet giriniz", min_value=1 , step=1)
+  
 
 
+ekl_prfy=st.button("portföye ekle")
 
+if ekl_prfy:
+    for  sec_coin in h_seç:
+     st.session_state.portföy.append({
+        "hisse":sec_coin,
+        "adet":adet
+     })
+
+    st.success(f"{sec_coin} kriptosu portföye eklendi")
+if st.session_state.portföy:
+   alt=pd.DataFrame(st.session_state.portföy)
+   st.dataframe(alt)
