@@ -1,26 +1,25 @@
-
-# py -m streamlit run C:\Users\batu\Desktop\kodlar\deneme.py 
-import streamlit as st # type: ignore
-import pandas as pd # type: ignore
-import plotly.express as px # type: ignore
-import websocket # type: ignore
-import plotly.graph_objects as go  # type: ignore
+import streamlit as st 
+import pandas as pd 
+import plotly.express as px 
+import websocket 
+import plotly.graph_objects as go 
 import json
 import threading
 import time
-import yfinance as yf # type: ignore
+import yfinance as yf 
 from google import genai 
 from collections import deque
-from  streamlit_autorefresh import st_autorefresh # type: ignore
+from  streamlit_autorefresh import st_autorefresh 
+import matplotlib.pyplot as plt 
 
-api_key = "****************"
-symbols = ["BINANCE:BTCUSDT", "BINANCE:ETHUSDT", "BINANCE:SOLUSDT "]
+api_key = "*****"
+symbols = ["BINANCE:BTCUSDT", "BINANCE:ETHUSDT", "BINANCE:SOLUSDT"]
 
 my_select=st.selectbox("kripto seçiniz",symbols)
 clen_symbols =my_select.split(":")[1]
 @st.cache_resource
 def get_prices():
-    return deque(maxlen=300)
+    return deque(maxlen=300)  
 
 prices=get_prices()
 
@@ -48,11 +47,15 @@ def on_message(ws, message):
 
 def on_open(ws):
     print("WebSocket açıldı")
-    
-    ws.send(json.dumps({
-        "type": "subscribe",
-        "symbol": my_select
-    }))
+    for symbol in symbols:
+        
+       ws.send(json.dumps({
+           "type": "subscribe",
+           "symbol": symbol,
+           
+       })) 
+   
+      
 
 def start_websocket():
    
@@ -77,36 +80,30 @@ if "started" not in st.session_state or st.session_state.started ==False:
 
 if len(prices) > 0:
     df = pd.DataFrame(list(prices))
+    df_grafik=df[df["symbol"]==my_select]
     
-    df=df.set_index("timestamp")
-    ahlc=df["price"].resample("1min").ohlc()
-
-    fig = go.Figure(
-        data=[
-            go.Candlestick(
-            x=ahlc.index,
-            open=ahlc["open"],
-            high=ahlc["high"],
-            low=ahlc["low"],
-            close=ahlc["close"],
-            name="Fiyat"
-            
-           )
-        ]
+    
+    fig = px.line(
+        df_grafik,
+        x="timestamp",
+        y="price",
+        color="symbol",
+        title=f"{clen_symbols} canlı fiyat grafiği"
     )
-    fig.update_layout(title=f"{clen_symbols} Canlı Fiyat Grafiği", xaxis_title="Zaman", yaxis_title="Fiyat (USD)", xaxis_rangeslider_visible=False)
-    st.plotly_chart(fig , use_container_width=True, key=f"candlestick_{len(prices)}")
-    
+    st.plotly_chart(fig, use_container_width=True, key=f"{len(prices)}")
+
 else:
-    st.info("bekleyiniz...") 
-st_autorefresh(interval=1000, key="refresh")
+    st.info("lütfen bekleiniz ...")
+st_autorefresh(interval=1000 , key="refresh")
+
+    
 
 
 """ yfinance ile geçmiş fiyat verisi çekme ve görselleştirme"""
 y_map={
     "BINANCE:BTCUSDT": "BTC-USD",
     "BINANCE:ETHUSDT": "ETH-USD",
-    "BINANCE:SOLUSDT": "SOL-USD "
+    "BINANCE:SOLUSDT": "SOL-USD",
     }
 yıl=["1y","2y","5y","10y","max"]
 
@@ -117,28 +114,46 @@ st.line_chart(cek["Close"])
 
 # portföy bölümü 
 st.title("portföyüm")
+left , right =st.columns([1,2])
 portföy=[]
+adetler={}
 if "portföy" not in st.session_state:
     st.session_state.portföy=[]
-
-h_seç=st.multiselect("hisse seçiniz",symbols)
-
-for sec_coin in h_seç:
-
-  adet=st.number_input(f"{sec_coin} için  adet giriniz", min_value=1 , step=1)
+with left:
+  h_seç=st.multiselect("hisse seçiniz",symbols)
   
-
-
-ekl_prfy=st.button("portföye ekle")
-
-if ekl_prfy:
-    for  sec_coin in h_seç:
-     st.session_state.portföy.append({
-        "hisse":sec_coin,
-        "adet":adet
-     })
-
-    st.success(f"{sec_coin} kriptosu portföye eklendi")
-if st.session_state.portföy:
-   alt=pd.DataFrame(st.session_state.portföy)
-   st.dataframe(alt)
+  for sec_coin in h_seç:
+  
+     adetler[sec_coin]=st.number_input(f"{sec_coin} için  adet giriniz", min_value=1 , step=1,key=f"adet_{sec_coin}")
+    
+  
+  
+  ekl_prfy=st.button("portföye ekle")
+with right:
+  if ekl_prfy:
+      for  sec_coin in h_seç:
+        coinn=sec_coin.split(":")[1]
+        co=df[df["symbol"]==sec_coin]
+        if not co.empty:
+            son_coin=co["price"].iloc[-1]
+            st.session_state.portföy.append({
+              "hisse":coinn,
+              "adet":adetler[sec_coin],
+              "fiyat":son_coin,
+              "değer": adetler[sec_coin] * son_coin
+              
+          })
+            
+      st.success(f"{sec_coin} kriptosu portföye eklendi")
+  if st.session_state.portföy:
+     alt=pd.DataFrame(st.session_state.portföy)
+     st.dataframe(alt, use_container_width=True)
+     
+     fig_pie=px.pie(
+         alt,
+         names="hisse",
+         values="değer",
+         title="portföydeki hisse dağılımı"
+         
+                    )
+     st.plotly_chart(fig_pie, use_container_width=True)
