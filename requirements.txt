@@ -1,0 +1,8 @@
+streamlit
+pandas
+plotly
+websocket-client
+yfinance
+google-genai
+streamlit-autorefresh
+matplotlib
