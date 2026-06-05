@@ -12,11 +12,25 @@ import threading
 import yfinance as yf  # type: ignore
 from collections import deque
 from streamlit_autorefresh import st_autorefresh  # type: ignore
+import os
+from dotenv import load_dotenv  # type: ignore
 
 # ─────────────────────────────────────────────
 # AYARLAR
 # ─────────────────────────────────────────────
-FINNHUB_API_KEY = "********************"
+
+def hesapla_rsii(close, period=14):
+            """ rsi hesaplama """
+            delta=close.diff() # günlük fiyat farkı
+            gain=delta.clip(lower=0).rolling(period).mean() # ortalama yükseliş 
+            loss=-delta.clip(upper=0).rolling(period).mean() # ortalama düşüş
+            rs=gain / loss # oran
+            rsi=100-(100 /(1+rs)) #rsi  formülü
+            return rsi
+
+
+load_dotenv()
+FINNHUB_API_KEY=os.getenv("FINNHUB_API_KEY")
 
 # Finnhub'da ABD hisse sembolleri
 SYMBOLS = ["AAPL", "TSLA", "GOOGL", "AMZN", "MSFT", "NVDA", "META"]
@@ -209,7 +223,7 @@ st.subheader("📅 Geçmiş Fiyat Analizi")
 
 col_zaman, col_ma = st.columns(2)
 with col_zaman:
-    donemler = ["1mo", "3mo", "6mo", "1y", "2y", "5y"]
+    donemler = ["1mo", "3mo", "6mo", "1y", "2y", "5y","10y","max"]
     zaman = st.selectbox("Zaman Aralığı", donemler, index=3)
 with col_ma:
     ma_gun = st.slider("Hareketli Ortalama (Gün)", min_value=5, max_value=100, value=20, step=5)
@@ -219,6 +233,47 @@ try:
 
     if not cek.empty:
         cek["MA"] = cek["Close"].rolling(window=ma_gun).mean()
+        
+        #rsi hesapla
+        cek["RSI"] = hesapla_rsii(cek["Close"].squeeze())
+        
+        #GRAFİK
+        fig_rsi=go.Figure()
+        fig_rsi.add_trace(go.Scatter(
+            x=cek.index,
+            y=cek["RSI"].squeeze(),
+            name="RSI",
+            line=dict(color="orange")
+            
+        ))
+        # rsi 70 aşırı alım 
+        fig_rsi.add_hline(y=70 , line_dash="dash", line_color="red", annotation_text="70 bölgesi aşırı alım")
+        
+        
+        
+         # rsi 30 aşırı satım
+        fig_rsi.add_hline(y=30 , line_dash="dash", line_color="green", annotation_text="30 bölgesi aşırı satım")
+        
+        fig_rsi.update_layout(
+            title=f"{my_select} RSI Değeri",
+            xaxis_title="Tarih",
+            yaxis_title="RSI",
+            yaxis=dict(range=[0, 100]),
+            hovermode="x unified"
+        )
+        st.plotly_chart(fig_rsi, use_container_width=True)
+        
+        """ rsi yorumu """
+        son_rsi=float(cek["RSI"].dropna().iloc[-1])
+        if son_rsi>70:
+            st.warning(f"RSI değeri {son_rsi:.2f} ile aşırı alım bölgesinde. Dikkatli olun!")
+            
+        elif son_rsi <30:
+            st.success(f"RSI değeri {son_rsi:.2f} ile aşırı satım bölgesinde. Fırsat olabilir!")
+        else:
+            st.info(f"RSI değeri {son_rsi:.2f} ile nötr bölgede.")
+         
+        
 
         fig_tarih = go.Figure()
         fig_tarih.add_trace(go.Scatter(
