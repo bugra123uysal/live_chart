@@ -82,13 +82,7 @@ live_chart/
 └── README.md
 ```
 
----
 
-## ⚠️ Notlar
-
-- Finnhub ücretsiz planda piyasa saatleri dışında canlı veri gelmeyebilir
-- `.env` dosyasını asla GitHub'a yükleme
-- Uygulama yatırım tavsiyesi vermez, yalnızca bilgi amaçlıdır
 
 ---
 
