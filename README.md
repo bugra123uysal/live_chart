@@ -1,289 +1,98 @@
 # live_chart
 
+# 📈 ABD Borsası Canlı Takip
 
-# 📈 Gerçek Zamanlı Hisse Senedi ve Portföy Takip Uygulaması
-
-Streamlit, Finnhub WebSocket, Plotly ve Yahoo Finance kullanılarak geliştirilmiş gerçek zamanlı hisse senedi takip ve portföy yönetim uygulaması.
-
-Bu uygulama kullanıcıların canlı hisse fiyatlarını takip etmesini, geçmiş performans analizleri yapmasını ve kendi yatırım portföylerini yönetmesini sağlar.
+Amerikan borsasındaki hisse senetlerini **gerçek zamanlı** olarak takip etmenizi, teknik analiz yapmanızı ve kendi portföyünüzü yönetmenizi sağlayan bir web uygulaması.
 
 ---
 
-# 🚀 Özellikler
+## 🚀 Özellikler
 
-## 📊 Canlı Piyasa Takibi
+- ⚡ **Canlı Fiyat Takibi** — WebSocket bağlantısı ile anlık fiyat ve hacim verileri
+- 📊 **RSI Göstergesi** — Aşırı alım/satım bölgelerini otomatik yorumlar
+- 📅 **Geçmiş Fiyat Analizi** — 1 ay ile tüm geçmiş arasında seçilebilir zaman aralığı
+- 📉 **Hareketli Ortalama** — Özelleştirilebilir MA göstergesi (5–100 gün)
+- 💼 **Portföy Yönetimi** — Hisse ekle, kar/zarar takip et, pasta grafik ile dağılımı gör
+- 🏢 **Şirket Bilgi Kartı** — Anlık fiyat, F/K oranı, 52 haftalık yüksek/düşük
 
-* Finnhub WebSocket ile gerçek zamanlı fiyat verileri
-* Otomatik güncellenen fiyat grafikleri
-* Birden fazla hisse senedini takip edebilme
-* Anlık işlem hacmi görüntüleme
-* Hızlı ve akıcı veri akışı
-
----
-
-## 📈 Grafik ve Teknik Analiz
-
-* Canlı fiyat grafikleri
-
-* Geçmiş fiyat analizleri
-
-* Farklı zaman aralıkları:
-
-  * 1 Ay
-  * 3 Ay
-  * 6 Ay
-  * 1 Yıl
-  * 2 Yıl
-  * 5 Yıl
-
-* Hareketli Ortalama (Moving Average) göstergesi
-
-* Volatilite hesaplamaları
-
-* Fiyat değişim yüzdeleri
 
 ---
 
-## 🏢 Şirket Bilgileri
+## 🛠️ Kurulum
 
-Seçilen hisse senedi için:
-
-* Güncel fiyat
-* Günlük değişim oranı
-* F/K (P/E) Oranı
-* 52 haftalık en yüksek fiyat
-* 52 haftalık en düşük fiyat
-* Şirket açıklaması
-
-görüntülenebilir.
-
----
-
-## 💼 Portföy Yönetimi
-
-Kullanıcılar kendi yatırım portföylerini oluşturabilir.
-
-### Portföy Özellikleri
-
-* Hisse ekleme
-* Alış fiyatı girme
-* Lot/adet girme
-* Portföy değerini hesaplama
-* Güncel fiyatları takip etme
-* Kar/Zarar hesaplama
-* Yüzdesel getiri hesaplama
-
----
-
-## 📉 Portföy Analitiği
-
-Portföy oluşturulduktan sonra:
-
-* Toplam portföy değeri
-* Toplam yatırım maliyeti
-* Toplam kar/zarar
-* Kar/zarar yüzdesi
-* Pozisyon sayısı
-
-hesaplanır.
-
-Ayrıca:
-
-* Portföy dağılımı pasta grafiği
-* Kar/Zarar karşılaştırma grafiği
-
-otomatik olarak oluşturulur.
-
----
-
-# ⚡ Performans Optimizasyonları
-
-Uygulama daha hızlı çalışması için çeşitli optimizasyonlar içermektedir.
-
-## Cache Kullanımı
-
-Yahoo Finance üzerinden çekilen:
-
-* Şirket bilgileri
-* Geçmiş fiyat verileri
-* Portföy fiyatları
-
-belirli sürelerle önbelleğe alınır.
-
-Bu sayede gereksiz API çağrıları azaltılır.
-
----
-
-## Bellek Yönetimi
-
-Canlı fiyat verileri Python'un `deque` veri yapısı ile saklanır.
-
-Bu yöntem:
-
-* Daha az RAM kullanır
-* Eski verileri otomatik temizler
-* Daha hızlı çalışır
-
----
-
-## Arka Plan Veri İşleme
-
-WebSocket bağlantısı ayrı bir thread üzerinde çalışır.
-
-Böylece:
-
-* Arayüz donmaz
-* Kullanıcı deneyimi iyileşir
-* Canlı veri akışı kesintisiz devam eder
-
----
-
-## Ayarlanabilir Yenileme Süresi
-
-Kullanıcı:
-
-* 1 saniye
-* 3 saniye
-* 5 saniye
-
-yenileme seçeneklerinden birini seçebilir.
-
-Bu sayede performans ve güncellik dengesi kurulabilir.
-
----
-
-# 🛠 Kullanılan Teknolojiler
-
-## Programlama Dili
-
-* Python
-
-## Arayüz
-
-* Streamlit
-
-## Veri İşleme
-
-* Pandas
-
-## Grafikler
-
-* Plotly
-* Plotly Express
-
-## Veri Kaynakları
-
-* Finnhub API
-* Yahoo Finance (yfinance)
-
-## Gerçek Zamanlı Veri
-
-* WebSocket
-
----
-
-# 📦 Kurulum
-
-Projeyi klonlayın:
+### 1. Repoyu klonla
 
 ```bash
-git clone https://github.com/kullaniciadi/proje-adi.git
-cd proje-adi
+git clone https://github.com/bugra123uysal/live_chart.git
+cd live_chart
 ```
 
-Gerekli paketleri yükleyin:
+### 2. Gerekli kütüphaneleri yükle
 
 ```bash
-pip install -r requirements.txt
+pip install streamlit pandas plotly websocket-client yfinance streamlit-autorefresh python-dotenv
 ```
 
-Uygulamayı çalıştırın:
+### 3. `.env` dosyası oluştur
+
+Proje klasörüne `.env` adında bir dosya oluştur ve Finnhub API key'ini ekle:
+
+```
+FINNHUB_API_KEY=senin_api_keyin
+```
+
+> 🔑 Ücretsiz API key almak için: [finnhub.io](https://finnhub.io)
+
+### 4. Uygulamayı çalıştır
 
 ```bash
-streamlit run borsa_takip_duzenlenmis.py
+py -m streamlit run borsa_takip_duzenlenmis.py
+```
+
+Tarayıcında otomatik olarak `http://localhost:8501` açılacaktır.
+
+---
+
+## 📦 Kullanılan Teknolojiler
+
+| Teknoloji | Kullanım Amacı |
+|-----------|---------------|
+| `Streamlit` | Web arayüzü |
+| `yfinance` | Geçmiş fiyat verisi |
+| `Finnhub WebSocket` | Canlı fiyat akışı |
+| `Plotly` | İnteraktif grafikler |
+| `Pandas` | Veri işleme |
+| `python-dotenv` | API key güvenliği |
+
+---
+
+## 📌 Desteklenen Hisseler
+
+`AAPL` `TSLA` `GOOGL` `AMZN` `MSFT` `NVDA` `META`
+
+---
+
+## 📁 Proje Yapısı
+
+```
+live_chart/
+├── borsa_takip_duzenlenmis.py   # Ana uygulama
+├── .env                          # API key (GitHub'a gitmez)
+├── .gitignore
+└── README.md
 ```
 
 ---
 
-# 🔑 API Anahtarı
+## ⚠️ Notlar
 
-Finnhub üzerinden ücretsiz API anahtarı oluşturabilirsiniz:
-
-https://finnhub.io
-
-Daha sonra aşağıdaki değişkene kendi anahtarınızı girmeniz yeterlidir:
-
-```python
-FINNHUB_API_KEY = "API_ANAHTARINIZ"
-```
+- Finnhub ücretsiz planda piyasa saatleri dışında canlı veri gelmeyebilir
+- `.env` dosyasını asla GitHub'a yükleme
+- Uygulama yatırım tavsiyesi vermez, yalnızca bilgi amaçlıdır
 
 ---
 
-# 🎯 Gelecek Güncellemeler
-
-Projeye eklenmesi planlanan özellikler:
-
-* RSI göstergesi
-* MACD göstergesi
-* Bollinger Bands
-* Hisse haberleri
-* İzleme listesi (Watchlist)
-* Excel'e aktarma
-* Alım/Satım sinyalleri
-* Risk analizi
-* Temettü takibi
-* Formasyon tespiti
-* Yapay zeka destekli analizler
-
----
-
-# 👨‍💻 Geliştirici
-
-**Buğra Uysal**
-
-Ekonomi ve Finans Öğrencisi
-
-İlgi Alanları:
-
-* Veri Bilimi (Data Science)
-* Finansal Analiz
-* Makine Öğrenmesi (Machine Learning)
-* Yazılım Geliştirme
-* Yapay Zeka Destekli Uygulamalar
-* Finansal Teknolojiler (FinTech)
-
-## 🌐 Bağlantılar
-
-**GitHub**
-
-[bugra123uysal GitHub Profili](https://github.com/bugra123uysal?utm_source=chatgpt.com)
-
-**LinkedIn**
-
-[Mesut Buğra Uysal LinkedIn Profili](https://www.linkedin.com/in/mesut-bu%C4%9Fra-uysal-16a1bb288/?utm_source=chatgpt.com)
-
-## 📫 İletişim
-
-GitHub ve LinkedIn üzerinden benimle iletişime geçebilir, projelerimi inceleyebilir veya geri bildirimde bulunabilirsiniz.
-
----
-
-# 🤝 Teşekkürler
-
-Bu proje geliştirilirken modern yapay zeka araçlarından destek alınmıştır:
-
-* ChatGPT
-* Claude
-
-Bu araçlar;
-
-* Kod inceleme
-* Hata ayıklama
-* Performans optimizasyonu
-* Mimari planlama
-* Özellik geliştirme
-
-süreçlerinde yardımcı olarak kullanılmıştır.
+## 🖥️ Ekran Görüntüsü
 
 <img width="1906" height="698" alt="Ekran görüntüsü 2026-06-03 213818" src="https://github.com/user-attachments/assets/b5167120-3087-4532-9099-3bdd44f88853" />
 
@@ -294,6 +103,15 @@ süreçlerinde yardımcı olarak kullanılmıştır.
 <img width="1860" height="716" alt="Ekran görüntüsü 2026-06-03 213957" src="https://github.com/user-attachments/assets/06289b3d-8c05-4d40-ad4f-7d54597916a4" />
 
 <img width="1907" height="770" alt="Ekran görüntüsü 2026-06-03 214150" src="https://github.com/user-attachments/assets/17c29abc-ce4a-4ee8-be2d-6c0ff890b696" />
+
+<img width="1871" height="538" alt="Ekran görüntüsü 2026-06-06 012031" src="https://github.com/user-attachments/assets/347526b2-0d0e-4c31-b833-345cee94f024" />
+
+
+## 👤 Geliştirici
+
+**Buğra Uysal**  
+[GitHub](https://github.com/bugra123uysal)
+
 
 
 
