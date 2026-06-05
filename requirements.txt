@@ -6,3 +6,4 @@ yfinance
 google-genai
 streamlit-autorefresh
 matplotlib
+python-dotenv
