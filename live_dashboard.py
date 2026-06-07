@@ -1,18 +1,18 @@
 
-import streamlit as st # type: ignore
-import pandas as pd # type: ignore
-import plotly.express as px # type: ignore
-import plotly.graph_objects as go # type: ignore
-from plotly.subplots import make_subplots # type: ignore
-import websocket # type: ignore
+import streamlit as st
+import pandas as pd 
+import plotly.express as px 
+import plotly.graph_objects as go 
+from plotly.subplots import make_subplots 
+import websocket 
 import json
 import threading
-import yfinance as yf # type: ignore
+import yfinance as yf 
 from collections import deque
-from streamlit_autorefresh import st_autorefresh # type: ignore
+from streamlit_autorefresh import st_autorefresh
 import os
-from dotenv import load_dotenv # type: ignore
-import numpy as np # type: ignore
+from dotenv import load_dotenv 
+import numpy as np 
 from datetime import datetime, timedelta
 
 # ─────────────────────────────────────────────
@@ -286,7 +286,7 @@ with st.sidebar:
 
     # Sekme seçimi
     st.markdown("### 📑 Görünüm")
-    aktif_sekme = st.radio("", ["Hisse Detayı", "Teknik Analiz", "Değerleme", "Portföy", "Benchmark"])
+    aktif_sekme = st.radio("", ["Hisse Detayı", "Teknik Analiz", "Değerleme", "Portföy", "Benchmark", "🎯 Swing Trade"])
 
     st.divider()
     st.markdown("""
@@ -1012,6 +1012,491 @@ elif aktif_sekme == "Benchmark":
 
     except Exception as e:
         st.error(f"Benchmark karşılaştırması yapılamadı: {e}")
+
+# ═══════════════════════════════════════════════════════
+# SEKME: SWING TRADE (Qullamaggie Stratejisi)
+# ═══════════════════════════════════════════════════════
+elif aktif_sekme == "🎯 Swing Trade":
+
+    # ─── CSS eklentisi
+    st.markdown("""
+    <style>
+    .qt-card {
+        background:#0c1a2e; border:1px solid #1e3a5f;
+        border-radius:12px; padding:16px 20px; margin:8px 0;
+    }
+    .qt-label { font-size:11px; color:#475569; text-transform:uppercase; letter-spacing:.08em; margin-bottom:4px; }
+    .qt-val   { font-size:20px; font-weight:700; color:#f1f5f9; }
+    .qt-sub   { font-size:12px; color:#64748b; margin-top:2px; }
+    .qt-green { color:#22c55e !important; }
+    .qt-red   { color:#ef4444 !important; }
+    .qt-amber { color:#f59e0b !important; }
+    .qt-badge {
+        display:inline-block; padding:3px 10px; border-radius:20px;
+        font-size:11px; font-weight:700; letter-spacing:.05em;
+    }
+    .badge-buy  { background:#052e16; border:1px solid #166534; color:#86efac; }
+    .badge-wait { background:#172554; border:1px solid #1e40af; color:#93c5fd; }
+    .badge-skip { background:#450a0a; border:1px solid #991b1b; color:#fca5a5; }
+    .rule-row { display:flex; gap:8px; align-items:flex-start; margin:6px 0; font-size:13px; color:#94a3b8; }
+    .rule-icon { font-size:16px; flex-shrink:0; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("## 🎯 Qullamaggie Swing Trade Tarayıcısı")
+    st.caption("Kristjan Kullamägi'nin momentum stratejisine göre otomatik hisse taraması. Yatırım tavsiyesi değildir.")
+
+    # ─── Qullamaggie filtre parametreleri (sidebar'a bağlı)
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("### 🎯 Swing Trade Filtreler")
+        min_adr   = st.slider("Min ADR% (Günlük Volatilite)", 1.0, 8.0, 2.0, 0.5,
+                              help="Qullamaggie %2+ ADR ister — düşük ADR'li hisseler hareket etmez")
+        min_hacim = st.slider("Min Hacim (M)", 0.5, 10.0, 1.0, 0.5,
+                              help="Likidite filtresi: günlük ortalama hacim milyar cinsinden")
+        tarama_evreni = st.multiselect(
+            "Tarama Evreni",
+            ["AAPL","MSFT","NVDA","META","AMZN","GOOGL","TSLA","AMD","NFLX",
+             "CRM","SHOP","ADBE","NOW","SNOW","DDOG","CRWD","ZS","MDB",
+             "COIN","MSTR","PLTR","SMCI","ARM","AVGO","ORCL","UBER","LYFT",
+             "ABNB","DASH","RBLX","U","HOOD","SOFI","AFRM","UPST","PATH",
+             "AI","GTLB","BILL","HUBS","TMDX","AXON","CELH","DUOL","TTD"],
+            default=["AAPL","MSFT","NVDA","META","AMZN","GOOGL","TSLA",
+                     "AMD","NFLX","CRM","SHOP","ADBE","NOW","SNOW","DDOG",
+                     "CRWD","ZS","COIN","PLTR","SMCI","AVGO","UBER","AXON","CELH","TTD"]
+        )
+        detay_symbol = st.selectbox("📋 Detay Grafik İçin Hisse", tarama_evreni if tarama_evreni else SYMBOLS)
+
+    # ─── Qullamaggie fonksiyonları
+    @st.cache_data(ttl=300, show_spinner=False)
+    def qqq_trend_kontrol() -> tuple[str, dict]:
+        """QQQ üzerinde 8/21/50 EMA kontrolü — piyasa yönünü belirler."""
+        try:
+            df = yf.download("QQQ", period="3mo", auto_adjust=True, progress=False)
+            c = df["Close"].squeeze()
+            ema8  = float(c.ewm(span=8,  adjust=False).mean().iloc[-1])
+            ema21 = float(c.ewm(span=21, adjust=False).mean().iloc[-1])
+            ema50 = float(c.ewm(span=50, adjust=False).mean().iloc[-1])
+            son   = float(c.iloc[-1])
+            trend = "YUKARI" if son > ema8 > ema21 > ema50 else \
+                    ("ZAYIF"  if son > ema50 else "ASAGI")
+            return trend, {"ema8": ema8, "ema21": ema21, "ema50": ema50, "son": son,
+                           "son_tarih": str(df.index[-1].date())}
+        except Exception:
+            return "BILINMIYOR", {}
+
+    @st.cache_data(ttl=300, show_spinner=False)
+    def hisse_tara(semboller: tuple, min_adr_pct: float, min_hacim_m: float) -> list[dict]:
+        """
+        Qullamaggie kriterleri:
+        1. Fiyat EMA8, EMA21, EMA50 üzerinde (trend)
+        2. ADR > min_adr_pct  (volatilite / hareket gücü)
+        3. Hacim > min_hacim_m milyon (likidite)
+        4. Son 3 günde düşen trend çizgisi var (konsolidasyon / bayrak)
+        5. Hacim spike: son kapanış hacmi 20-gün ortalamasının üstünde
+        6. RSI 50-80 arası (momentum bölgesi, aşırı alım değil)
+        """
+        sonuclar = []
+        for sym in semboller:
+            try:
+                df = yf.download(sym, period="6mo", auto_adjust=True, progress=False)
+                if df is None or df.empty or len(df) < 60:
+                    continue
+
+                c  = df["Close"].squeeze()
+                h  = df["High"].squeeze()
+                lo = df["Low"].squeeze()
+                v  = df["Volume"].squeeze()
+
+                son = float(c.iloc[-1])
+
+                # EMA'lar
+                ema8  = float(c.ewm(span=8,  adjust=False).mean().iloc[-1])
+                ema21 = float(c.ewm(span=21, adjust=False).mean().iloc[-1])
+                ema50 = float(c.ewm(span=50, adjust=False).mean().iloc[-1])
+                ema_ok = son > ema8 and son > ema21 and son > ema50 and ema8 > ema21 > ema50
+
+                # ADR hesapla (son 14 günlük ortalama günlük aralık / fiyat)
+                adr_pct = float(((h - lo) / c).rolling(14).mean().iloc[-1] * 100)
+
+                # Hacim (20g ortalama, milyon)
+                avg_vol_m = float(v.rolling(20).mean().iloc[-1]) / 1e6
+                son_vol   = float(v.iloc[-1]) / 1e6
+                vol_spike = son_vol > float(v.rolling(20).mean().iloc[-1]) * 1.3
+
+                # RSI
+                delta = c.diff()
+                gain  = delta.clip(lower=0).rolling(14).mean()
+                loss  = -delta.clip(upper=0).rolling(14).mean()
+                rs    = gain / loss
+                rsi   = float((100 - 100 / (1 + rs)).iloc[-1])
+                rsi_ok = 50 <= rsi <= 80
+
+                # Düşen trend çizgisi tespiti (son 10 bar içinde yüksekler düşüyor mu?)
+                son10_highs = h.iloc[-10:].values
+                x = np.arange(len(son10_highs))
+                egim = float(np.polyfit(x, son10_highs, 1)[0])
+                dusus_var = egim < -0.05 * float(son10_highs.mean()) / 10
+
+                # Son bar kırılım teyidi: son kapanış, son 10-bar highların trend çizgisini kırdı mı?
+                trend_line_son = float(np.polyval(np.polyfit(x, son10_highs, 1), len(son10_highs) - 1))
+                kirilim = son > trend_line_son and vol_spike
+
+                # Skor hesapla (max 5)
+                skor = sum([ema_ok, adr_pct >= min_adr_pct, avg_vol_m >= min_hacim_m,
+                            rsi_ok, kirilim])
+
+                if not (ema_ok and adr_pct >= min_adr_pct and avg_vol_m >= min_hacim_m):
+                    continue  # Zorunlu filtreler geçilmeli
+
+                # Giriş / Stop / Hedef seviyeleri
+                # Qullamaggie: giriş = kırılım günü yüksek üstü
+                gün_yüksek    = float(h.iloc[-1])
+                gün_dusuk     = float(lo.iloc[-1])
+                önceki_düşük  = float(lo.iloc[-3:-1].min())  # 1-2 önceki gün düşük (stop için)
+                son5_yüksek   = float(h.iloc[-5:].max())     # 5-bar pivot yüksek (hedef 1)
+                son20_yüksek  = float(h.iloc[-20:].max())    # Önceki zirve (hedef 2)
+
+                giris          = round(gün_yüksek * 1.002, 2)   # Kırılım üstü %0.2 pip
+                stop_loss      = round(min(gün_dusuk, önceki_düşük) * 0.995, 2)
+                hedef1         = round(son5_yüksek  * 1.01, 2)
+                hedef2         = round(son20_yüksek * 1.02, 2)
+                risk_reward    = round((hedef1 - giris) / max(giris - stop_loss, 0.01), 2)
+                risk_pct       = round((giris - stop_loss) / giris * 100, 2)
+
+                # Formasyonu tespit et
+                if dusus_var and kirilim:
+                    formasyon = "🚩 Düşen Kanal Kırılımı"
+                elif vol_spike and rsi_ok:
+                    formasyon = "📊 Hacim Patlaması"
+                elif ema_ok and rsi_ok:
+                    formasyon = "📐 EMA Sıkışması"
+                else:
+                    formasyon = "🔍 Konsolidasyon"
+
+                sonuclar.append({
+                    "Sembol": sym,
+                    "Fiyat ($)": round(son, 2),
+                    "ADR (%)": round(adr_pct, 2),
+                    "Ort.Hacim (M)": round(avg_vol_m, 1),
+                    "RSI": round(rsi, 1),
+                    "EMA Sırası ✓": ema_ok,
+                    "Kırılım": kirilim,
+                    "Formasyon": formasyon,
+                    "Giriş ($)": giris,
+                    "Stop ($)": stop_loss,
+                    "Hedef 1 ($)": hedef1,
+                    "Hedef 2 ($)": hedef2,
+                    "Risk (%)": risk_pct,
+                    "R/R Oranı": risk_reward,
+                    "Skor": skor,
+                    "EMA8": round(ema8,2), "EMA21": round(ema21,2), "EMA50": round(ema50,2),
+                })
+            except Exception:
+                continue
+        sonuclar.sort(key=lambda x: x["Skor"], reverse=True)
+        return sonuclar
+
+    @st.cache_data(ttl=300, show_spinner=False)
+    def detay_grafik_verisi(symbol: str) -> pd.DataFrame:
+        df = yf.download(symbol, period="6mo", auto_adjust=True, progress=False)
+        return df
+
+    # ─── ÇALIŞTIR
+    st.markdown('<div class="section-header">📡 QQQ Piyasa Trendi (Qullamaggie Filtre #1)</div>', unsafe_allow_html=True)
+
+    trend, qqq_vals = qqq_trend_kontrol()
+    tc1, tc2, tc3, tc4, tc5 = st.columns(5)
+    trend_badge = {
+        "YUKARI":     '<span class="qt-badge badge-buy">⬆ YUKARI TREND — İşlem YAP</span>',
+        "ZAYIF":      '<span class="qt-badge badge-wait">↔ ZAYIF TREND — Dikkatli Ol</span>',
+        "ASAGI":      '<span class="qt-badge badge-skip">⬇ AŞAĞI TREND — İşlem YAPMA</span>',
+        "BILINMIYOR": '<span class="qt-badge badge-wait">? Veri alınamadı</span>',
+    }[trend]
+    with tc1:
+        st.markdown(f'<div class="qt-card"><div class="qt-label">QQQ Trend</div>{trend_badge}</div>', unsafe_allow_html=True)
+    with tc2:
+        st.markdown(f'<div class="qt-card"><div class="qt-label">QQQ Fiyat</div><div class="qt-val">${qqq_vals.get("son",0):.2f}</div><div class="qt-sub">{qqq_vals.get("son_tarih","")}</div></div>', unsafe_allow_html=True)
+    with tc3:
+        st.markdown(f'<div class="qt-card"><div class="qt-label">EMA 8</div><div class="qt-val qt-green">${qqq_vals.get("ema8",0):.2f}</div></div>', unsafe_allow_html=True)
+    with tc4:
+        st.markdown(f'<div class="qt-card"><div class="qt-label">EMA 21</div><div class="qt-val qt-amber">${qqq_vals.get("ema21",0):.2f}</div></div>', unsafe_allow_html=True)
+    with tc5:
+        st.markdown(f'<div class="qt-card"><div class="qt-label">EMA 50</div><div class="qt-val qt-red">${qqq_vals.get("ema50",0):.2f}</div></div>', unsafe_allow_html=True)
+
+    if trend == "ASAGI":
+        st.error("⛔ Piyasa düşüş trendinde. Qullamaggie: 'Piyasa karşında işlem açma, nakit tut.'")
+    elif trend == "ZAYIF":
+        st.warning("⚠️ Piyasa zayıf. Pozisyon boyutunu küçült, seçici ol.")
+    else:
+        st.success("✅ Piyasa yükseliş trendinde. Kırılım yapan hisseleri ara.")
+
+    st.markdown("---")
+
+    # ─── TARAMA
+    st.markdown('<div class="section-header">🔍 Otomatik Hisse Taraması — Qullamaggie Kriterleri</div>', unsafe_allow_html=True)
+
+    col_filtre, col_kural = st.columns([3, 2])
+    with col_filtre:
+        st.markdown(f"**Taranan:** {len(tarama_evreni)} hisse &nbsp;|&nbsp; **Min ADR:** %{min_adr} &nbsp;|&nbsp; **Min Hacim:** {min_hacim}M")
+    with col_kural:
+        st.markdown("""
+        <div style="font-size:12px; color:#64748b; line-height:1.9;">
+        ✅ EMA8 > EMA21 > EMA50 (Trend)&nbsp;&nbsp;
+        ✅ ADR > %2 (Hareket Gücü)&nbsp;&nbsp;
+        ✅ Hacim > 1M (Likidite)&nbsp;&nbsp;
+        ✅ RSI 50–80 (Momentum)&nbsp;&nbsp;
+        ✅ Düşen Kanal Kırılımı + Hacim Spike
+        </div>
+        """, unsafe_allow_html=True)
+
+    with st.spinner("Hisseler taranıyor..."):
+        tarama_sonuc = hisse_tara(tuple(tarama_evreni), min_adr, min_hacim)
+
+    if not tarama_sonuc:
+        st.info("Mevcut filtrelere uyan hisse bulunamadı. Min ADR veya Hacim eşiğini düşürmeyi deneyin.")
+    else:
+        st.success(f"✅ {len(tarama_sonuc)} hisse kriterleri karşıladı. Skor sırasına göre listelendi.")
+
+        # Tablo gösterimi
+        df_tarama = pd.DataFrame(tarama_sonuc)
+        göster_kolonlar = ["Sembol","Fiyat ($)","ADR (%)","Ort.Hacim (M)","RSI",
+                           "Formasyon","Giriş ($)","Stop ($)","Hedef 1 ($)","Hedef 2 ($)",
+                           "Risk (%)","R/R Oranı","Skor"]
+        df_göster = df_tarama[göster_kolonlar].copy()
+
+        def rr_renk(val):
+            if isinstance(val, float):
+                return "color: #22c55e" if val >= 2 else ("color: #f59e0b" if val >= 1 else "color: #ef4444")
+            return ""
+        def risk_renk(val):
+            if isinstance(val, float):
+                return "color: #22c55e" if val <= 5 else ("color: #f59e0b" if val <= 8 else "color: #ef4444")
+            return ""
+
+        styled_tarama = df_göster.style \
+            .map(rr_renk, subset=["R/R Oranı"]) \
+            .map(risk_renk, subset=["Risk (%)"])
+        st.dataframe(styled_tarama, use_container_width=True, hide_index=True)
+
+        # ─── Özet bar chart: R/R oranı
+        fig_rr = go.Figure(go.Bar(
+            x=[r["Sembol"] for r in tarama_sonuc],
+            y=[r["R/R Oranı"] for r in tarama_sonuc],
+            marker_color=["#22c55e" if r["R/R Oranı"] >= 2 else "#f59e0b" for r in tarama_sonuc],
+            text=[f"{r['R/R Oranı']:.1f}x" for r in tarama_sonuc],
+            textposition="outside"
+        ))
+        fig_rr.add_hline(y=2, line_dash="dash", line_color="#94a3b8", line_width=1,
+                         annotation_text="Min 2:1 R/R (Qullamaggie eşiği)")
+        fig_rr.update_layout(
+            title="Risk/Ödül Oranları",
+            template=PLOTLY_TEMPLATE, height=260,
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=0, r=0, t=40, b=0),
+            yaxis_title="R/R Oranı"
+        )
+        st.plotly_chart(fig_rr, use_container_width=True)
+
+    st.markdown("---")
+
+    # ─── DETAY GRAFİĞİ
+    st.markdown(f'<div class="section-header">📊 Detay Grafik: {detay_symbol} — Düşen Kanal + Seviyeler</div>', unsafe_allow_html=True)
+
+    try:
+        df_det = detay_grafik_verisi(detay_symbol)
+        if df_det.empty:
+            st.warning("Veri alınamadı.")
+        else:
+            c_det  = df_det["Close"].squeeze()
+            h_det  = df_det["High"].squeeze()
+            lo_det = df_det["Low"].squeeze()
+            v_det  = df_det["Volume"].squeeze()
+
+            # Son 60 bar üzerinden çalış
+            son60 = df_det.iloc[-60:]
+            c60   = son60["Close"].squeeze()
+            h60   = son60["High"].squeeze()
+            lo60  = son60["Low"].squeeze()
+            v60   = son60["Volume"].squeeze()
+
+            # EMA'lar (tüm seri üzerinden hesapla, son 60'ı al)
+            ema8_s  = c_det.ewm(span=8,  adjust=False).mean().iloc[-60:]
+            ema21_s = c_det.ewm(span=21, adjust=False).mean().iloc[-60:]
+            ema50_s = c_det.ewm(span=50, adjust=False).mean().iloc[-60:]
+
+            # Düşen trend çizgisi: son 10-15 bar highlarından regresyon
+            pencere = 12
+            son_pencere = h60.iloc[-pencere:]
+            x_p = np.arange(pencere)
+            pol = np.polyfit(x_p, son_pencere.values, 1)
+            trend_y = np.polyval(pol, x_p)
+            trend_x = son_pencere.index.tolist()
+
+            # Seviyeler
+            giris_fiyat = round(float(h60.iloc[-1]) * 1.002, 2)
+            stop_fiyat  = round(min(float(lo60.iloc[-1]), float(lo60.iloc[-3:-1].min())) * 0.995, 2)
+            hedef1_fiyat = round(float(h60.iloc[-5:].max()) * 1.01, 2)
+            hedef2_fiyat = round(float(h60.max()) * 1.02, 2)
+
+            # ─── Grafik
+            fig_det = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                                    row_heights=[0.75, 0.25], vertical_spacing=0.04)
+
+            # Mum grafiği
+            fig_det.add_trace(go.Candlestick(
+                x=son60.index,
+                open=son60["Open"].squeeze(), high=h60,
+                low=lo60, close=c60,
+                name="OHLC",
+                increasing_line_color="#22c55e", decreasing_line_color="#ef4444",
+                increasing_fillcolor="#166534", decreasing_fillcolor="#7f1d1d",
+            ), row=1, col=1)
+
+            # EMA çizgileri
+            fig_det.add_trace(go.Scatter(x=ema8_s.index,  y=ema8_s,
+                name="EMA 8",  line=dict(color="#22c55e", width=1.5)), row=1, col=1)
+            fig_det.add_trace(go.Scatter(x=ema21_s.index, y=ema21_s,
+                name="EMA 21", line=dict(color="#f59e0b", width=1.5)), row=1, col=1)
+            fig_det.add_trace(go.Scatter(x=ema50_s.index, y=ema50_s,
+                name="EMA 50", line=dict(color="#ec4899", width=1.5, dash="dash")), row=1, col=1)
+
+            # ── Düşen trend çizgisi (kırmızı kesikli)
+            fig_det.add_trace(go.Scatter(
+                x=trend_x, y=trend_y.tolist(),
+                mode="lines", name="Düşen Trend Çizgisi",
+                line=dict(color="#ef4444", width=2, dash="dash"),
+            ), row=1, col=1)
+
+            # Düşen kanal bölgesi — trend üstü gölge
+            # Alt kanal = trend - (max high - trend ortası)
+            aralik = float(np.max(trend_y) - np.min(trend_y)) * 0.5
+            alt_kanal = trend_y - aralik
+            fig_det.add_trace(go.Scatter(
+                x=trend_x + trend_x[::-1],
+                y=trend_y.tolist() + alt_kanal[::-1].tolist(),
+                fill="toself", fillcolor="rgba(239,68,68,0.06)",
+                line=dict(color="rgba(0,0,0,0)"),
+                name="Düşen Kanal", showlegend=True
+            ), row=1, col=1)
+
+            # ── Yatay seviye çizgileri
+            y_range_pad = (giris_fiyat - stop_fiyat) * 0.3
+            seviyeler = [
+                (giris_fiyat,  "#60a5fa", "solid",  "🔵 Giriş", "right"),
+                (stop_fiyat,   "#ef4444", "dot",    "🔴 Stop Loss", "right"),
+                (hedef1_fiyat, "#22c55e", "dash",   "🟢 Hedef 1 (25% sat)", "right"),
+                (hedef2_fiyat, "#a78bfa", "longdash","🟣 Hedef 2 (kalan %75)", "right"),
+            ]
+            for fiyat_s, renk, dash, etiket, pos in seviyeler:
+                fig_det.add_hline(
+                    y=fiyat_s, line_dash=dash, line_color=renk, line_width=1.5,
+                    annotation_text=f"{etiket}: ${fiyat_s}",
+                    annotation_position=f"top {pos}",
+                    annotation_font_color=renk,
+                    annotation_font_size=11,
+                    row=1, col=1
+                )
+
+            # Risk bölgesi gölgesi (stop → giriş arası)
+            fig_det.add_hrect(
+                y0=stop_fiyat, y1=giris_fiyat,
+                fillcolor="rgba(239,68,68,0.07)", line_width=0,
+                annotation_text="⚠️ Risk Bölgesi", annotation_font_color="#ef4444",
+                annotation_font_size=10, row=1, col=1
+            )
+            # Kar bölgesi gölgesi (giriş → hedef1 arası)
+            fig_det.add_hrect(
+                y0=giris_fiyat, y1=hedef1_fiyat,
+                fillcolor="rgba(34,197,94,0.05)", line_width=0,
+                row=1, col=1
+            )
+
+            # Hacim (renkli)
+            vol_colors = ["#22c55e" if float(c60.iloc[i]) >= float(c60.iloc[i-1])
+                          else "#ef4444" for i in range(1, len(c60))]
+            vol_colors.insert(0, "#94a3b8")
+            avg_vol = float(v60.rolling(20).mean().iloc[-1])
+            fig_det.add_trace(go.Bar(x=son60.index, y=v60,
+                marker_color=vol_colors, name="Hacim", showlegend=False), row=2, col=1)
+            fig_det.add_hline(y=avg_vol, line_dash="dot", line_color="#94a3b8", line_width=1,
+                               annotation_text="20g Ort.", annotation_font_size=10, row=2, col=1)
+
+            fig_det.update_layout(
+                title=f"{detay_symbol} — Son 60 Bar | Qullamaggie Swing Seviyeleri",
+                template=PLOTLY_TEMPLATE, height=680,
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                margin=dict(l=0, r=0, t=50, b=0),
+                legend=dict(orientation="h", y=1.02),
+                xaxis_rangeslider_visible=False,
+                hovermode="x unified"
+            )
+            fig_det.update_yaxes(gridcolor="rgba(255,255,255,0.04)")
+            fig_det.update_xaxes(gridcolor="rgba(255,255,255,0.04)")
+            st.plotly_chart(fig_det, use_container_width=True)
+
+            # ─── Seviye özet kartları
+            st.markdown('<div class="section-header">📐 İşlem Planı — Qullamaggie Kuralları</div>', unsafe_allow_html=True)
+
+            risk_dolar  = round(giris_fiyat - stop_fiyat, 2)
+            hedef1_kar  = round(hedef1_fiyat - giris_fiyat, 2)
+            hedef2_kar  = round(hedef2_fiyat - giris_fiyat, 2)
+            rr1 = round(hedef1_kar / max(risk_dolar, 0.01), 2)
+            rr2 = round(hedef2_kar / max(risk_dolar, 0.01), 2)
+
+            k1, k2, k3, k4, k5, k6 = st.columns(6)
+            kart_data = [
+                (k1, "🔵 Giriş Fiyatı",    f"${giris_fiyat}",    "Kırılım üstü %0.2 pip", "#3b82f6"),
+                (k2, "🔴 Stop Loss",        f"${stop_fiyat}",     f"Risk: ${risk_dolar} / hisse", "#ef4444"),
+                (k3, "🟢 Hedef 1",          f"${hedef1_fiyat}",   f"+${hedef1_kar} | R/R: {rr1}x", "#22c55e"),
+                (k4, "🟣 Hedef 2",          f"${hedef2_fiyat}",   f"+${hedef2_kar} | R/R: {rr2}x", "#a78bfa"),
+                (k5, "⚡ Risk (%)",         f"%{round((giris_fiyat-stop_fiyat)/giris_fiyat*100,2)}", "Girişten stop'a mesafe", "#f59e0b"),
+                (k6, "📊 EMA Sırası",
+                     "✅ Sıralı" if float(c_det.ewm(span=8,adjust=False).mean().iloc[-1]) >
+                                    float(c_det.ewm(span=21,adjust=False).mean().iloc[-1]) >
+                                    float(c_det.ewm(span=50,adjust=False).mean().iloc[-1]) else "❌ Bozuk",
+                     "EMA8>EMA21>EMA50", "#64748b"),
+            ]
+            for kol, baslik, deger, alt, renk in kart_data:
+                with kol:
+                    st.markdown(f"""
+                    <div class="qt-card" style="border-color:{renk}40">
+                        <div class="qt-label">{baslik}</div>
+                        <div class="qt-val" style="color:{renk}">{deger}</div>
+                        <div class="qt-sub">{alt}</div>
+                    </div>""", unsafe_allow_html=True)
+
+            # ─── Qullamaggie kuralları özeti
+            st.markdown("---")
+            st.markdown("#### 📖 Qullamaggie Uygulama Kuralları")
+            col_r1, col_r2 = st.columns(2)
+            with col_r1:
+                st.markdown(f"""
+                <div class="qt-card">
+                <b style="color:#60a5fa">GİRİŞ KOŞULLARI</b><br><br>
+                <div class="rule-row"><span class="rule-icon">1️⃣</span> QQQ fiyat EMA8 > EMA21 > EMA50 üzerinde olmalı</div>
+                <div class="rule-row"><span class="rule-icon">2️⃣</span> Hisse EMA sırası korunuyor: EMA8 > EMA21 > EMA50</div>
+                <div class="rule-row"><span class="rule-icon">3️⃣</span> Düşen trend çizgisi güçlü hacimle kırıldı</div>
+                <div class="rule-row"><span class="rule-icon">4️⃣</span> RSI 50–80 arası (aşırı alım değil, momentum var)</div>
+                <div class="rule-row"><span class="rule-icon">5️⃣</span> ADR ≥ %2 — hisse yeterli günlük hareket yapıyor</div>
+                <div class="rule-row"><span class="rule-icon">6️⃣</span> 5 veya 15 dakikalık grafikte kırılım teyidi al</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_r2:
+                st.markdown(f"""
+                <div class="qt-card">
+                <b style="color:#22c55e">KAR ALMA & STOP YÖNETİMİ</b><br><br>
+                <div class="rule-row"><span class="rule-icon">🟢</span> <b>Hedef 1 (${hedef1_fiyat}):</b> Pozisyonun %25'ini sat, stop'u maliyete çek → risk sıfır</div>
+                <div class="rule-row"><span class="rule-icon">🟣</span> <b>Hedef 2 (${hedef2_fiyat}):</b> Kalan %75'i kademelı sat veya trailing stop ile tut</div>
+                <div class="rule-row"><span class="rule-icon">🔴</span> <b>Stop Loss (${stop_fiyat}):</b> Giriş günü veya önceki günün düşüğü altı — kesinlikle uy!</div>
+                <div class="rule-row"><span class="rule-icon">⚠️</span> QQQ yön değiştirirse pozisyonu küçült</div>
+                <div class="rule-row"><span class="rule-icon">📏</span> Pozisyon boyutu: hesap riski max %1–2 (stop × lot = toplam risk)</div>
+                <div class="rule-row"><span class="rule-icon">🧠</span> Duygularla değil, teknik sinyallerle hareket et</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    except Exception as e:
+        st.error(f"Detay grafik oluşturulamadı: {e}")
 
 st.markdown("---")
 st.markdown(
